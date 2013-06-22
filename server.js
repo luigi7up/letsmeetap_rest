@@ -2,7 +2,7 @@
  * Main app module, contains server routes and basic request-response logic.
  */
 
-var PORT = 1983;
+var PORT = 5000;
 var restify = require('restify');
 
 var options = {
@@ -14,7 +14,7 @@ var server = restify.createServer(options);
 
 server.use(restify.bodyParser({ mapParams: false }));
 
-server.listen(PORT, '0.0.0.0');
+server.listen(PORT);
 console.log("listening "+PORT);
 /*******************	END SERVER SETUP	************************** */
 
