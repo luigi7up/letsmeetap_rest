@@ -1,8 +1,8 @@
 {
-  "name": "letsmeetapp@heroku",
+  "name": "letsmeetappserver",
   "version": "0.0.1",
   "dependencies": {
-    "express": "2.5.1",
+    "express": "2.5.1"
 
   },
   "engines": {
