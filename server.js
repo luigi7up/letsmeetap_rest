@@ -14,7 +14,7 @@ var server = restify.createServer(options);
 
 server.use(restify.bodyParser({ mapParams: false }));
 
-server.listen(PORT);
+server..listen(process.env.PORT || PORT);	//HEROKU binds to a dynamic port so ....
 console.log("listening "+PORT);
 /*******************	END SERVER SETUP	************************** */
 
