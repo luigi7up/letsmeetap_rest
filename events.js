@@ -1,231 +1,192 @@
 
-
-var db 	= require('./mysql_conn');
-var connection = db.connection;
-
-/*	We need this for md5 calculations*/
-var crypto = require('crypto');
+var crypto = require('crypto');		/*	We need this for md5 calculations*/
 
 
 
 
+/*	DATABASE */
+var pg = require('pg');
+var config = require('./config.json');
 
-//Define an empty object Events that will be exported to other modules through exports.Events
+//var conString = "postgres://root:root@localhost:5432/letsmeetapp";
+var conString = "tcp://"+config.db.username+":"+config.db.password+"@"+config.db.host+":"+config.db.port+"/"+config.db.name;
+var client = new pg.Client(conString);
+
+if(!client){
+	console.log("Starting client to DB "+conString+ " failed")
+}else{
+	console.log("Started client to  DB"+client.host+"/"+client.database);
+}
+
+client.connect();
+
+//Define an object Events that will be exported to other modules through exports.Events
 function Events(){};
 exports.Events = Events;
 
 
-//Gets all rows from events table
+/*
+* *******************************GET ALL EVENTS! ****************************************************
+*/
 Events.prototype.getAllEvents = function(callback){
 		
-		var query =  'SELECT * FROM letsmeetapp.event';
-		
-		var allEvents;
-		
-		connection.query( query, queryResultHandler);
-		
-		function queryResultHandler(err, rows){	
-		
-			if(err) console.log("ERROR in getAllEvents"+err);
-		
-			allEvents = rows;
-			callback(allEvents)	;	
+		//Number of queries that will be executed is number of events * 2 (one query for invited users and the othr for days). To synchronize them
+		monitor = new Monitor();
 			
-		}//queryResultHandler
-}
-
-
-//Gets days for each event
-Events.prototype.getAllDaysForEvents = function(params, callback){
-	
-	var allEvents = params;
-	
-	var allDaysForEvents;
-	var query =  'SELECT id_event, datetime from letsmeetapp.day_of_event where id_event IN (?)';
-	
-	var values = [ ];
-	
-	
-	//MUltiple values have to provided as a nested array!!! [values]
-	for(var x=0; x<allEvents.length; x++){
-		values.push([allEvents[x].id_event]);
-	}
-	
-	connection.query( query, [values], queryResultHandler);
-	
-	function queryResultHandler(err, rows){
+		console.log("Events.prototype.getAllEvents");
+		var allEvents = [];
 		
-		if(err) console.log("ERROR in getAllDaysForEvents"+err);
+		var query =  client.query('SELECT * FROM event', queryAllEventsHandler);
 		
-		for(var x=0; x<allEvents.length; x++){
-				var daysForEvent= [];
-				for(var z=0; z<rows.length; z++){
-					if(allEvents[x].id_event == rows[z].id_event) daysForEvent.push(rows[z].datetime);
+	
+		function queryAllEventsHandler(err, result){		
+			allEvents = result.rows;
 			
-				}
-				allEvents[x]['days'] = daysForEvent;
+			if(allEvents.length == 0) callback([]);
+			//Monitoring async queries number			
+			monitor.setQueries(allEvents.length * 2);
+			
+			console.log("ALL EVENTS callback **** ");
+			console.log("**all events:"+JSON.stringify(allEvents));
+
+			for(var i = 0; i<allEvents.length; i++){
+				console.log("SELECTS FOR id_event"+allEvents[i].id_event);
+				
+				//Note that we use bind to pass an extra arg as THIS...
+				client.query('SELECT * FROM day_of_event where id_event = $1',[allEvents[i].id_event], queryDaysHandler.bind( {"position":i, "id_event":allEvents[i].id_event}));				
+				//Note that we use bind to pass an extra arg as THIS...
+				client.query('SELECT email FROM invitation where id_event = $1',[allEvents[i].id_event], queryInvitedHandler.bind( {"position":i, "id_event":allEvents[i].id_event}));
+				
+			}		
 		}
+
 		
-		callback(allEvents);	
-	}
-
-}
-
-
-//Gets invited users  for each event
-Events.prototype.getAllInvitedUsersForEvents = function(params, callback){
-	
-	var allEvents = params;
-	
-
-	var query =  'SELECT id_event, email from letsmeetapp.invitation I where id_event IN(?)';
-	//var query =  'SELECT id_event, username from user U, event_user EU where id_event IN(?) and U.id_user = EU.id_user';
-	
-	var values = [ ];
-	
-	
-	//Multiple values have to provided as a nested array!!! [values]
-	for(var x=0; x<allEvents.length; x++){
-		values.push([allEvents[x].id_event]);
-	}
-	
-	console.log("values  "+values);
-	
-	connection.query( query, [values], queryResultHandler);
-	
-	function queryResultHandler(err, rows){
-		
-		if(err) console.log(err);
-		
-		for(var x=0; x<allEvents.length; x++){
-				var invitedUsers= [];
-				for(var z=0; z<rows.length; z++){
-					if(allEvents[x].id_event == rows[z].id_event) invitedUsers.push(rows[z].email);
-			
+		function queryDaysHandler(err, result){		
+			monitor.oneLess();			
+			//"this" is passed as { "position":i, "id_event":... } using bind
+			var position = this.position;
+			var id_event = this.id_event;
+			var days = result.rows;
+						
+			if(days.length == 0){
+				days = [];			
+			}else{
+				var temp = [];	//extract just the datetime part of the day
+				for(var i=0;i<days.length;i++){
+					temp.push(days[i].datetime);
 				}
-				allEvents[x]['invited_users'] = invitedUsers;
-		}
-		
-		callback(allEvents);	
-	}
+				days = temp;
+			}			
+			
+			allEvents[position]["days"] = days ;
 
+			if(monitor.isDone() == true) return callback(allEvents);			
+		}
+
+		function queryInvitedHandler(err, result){			
+			monitor.oneLess();			
+			//"this" is passed as { "position":i, "id_event":... } using bind
+			var position = this.position;
+			var id_event = this.id_event;
+			var invited_users = result.rows;
+						
+			if(invited_users.length == 0){
+				invited_users = [];			
+			}else{
+				var temp = [];	//extract just the datetime part of the day
+				for(var i=0;i<invited_users.length;i++){
+					temp.push(invited_users[i].email);
+				}
+				invited_users = temp;
+			}			
+			
+			
+			allEvents[position]["invited_users"] = invited_users ;	
+			console.log("allEvents[position][invited_users]"+JSON.stringify(allEvents[position]["invited_users"]));			
+			if(monitor.isDone() == true) return callback(allEvents);
+		}			
+		
 }
 
 
-/**
-*	Creating event
+
+/*
+************************* CREATE NEW EVENT	************************
 */
-Events.prototype.insertEvent = function (newEventJson, callback) {
 
-	var now = new Date();
-	
+Events.prototype.insertEvent = function (newEventJson, callback) {
 	var name 					= newEventJson.name;
 	var description  			= newEventJson.description;
-	var creator_id 				= newEventJson.creator_id;
+	var id_creator 				= newEventJson.id_creator;
 	var days						= newEventJson.days;
 	var invited_users		= newEventJson.invited_users;
 	
 	console.log("insertEvent called ");
 	
-	var date_of_creation 	= now.toString();
+	monitor = new Monitor();
+	monitor.setQueries(days.length+invited_users.length);
 	
-	//Takes the QUERY, PARAMETERS TO INSERT, and a callback function for the query result that in turn calls clients callback
-	connection.query(
-			'INSERT INTO letsmeetapp.event SET `name` = ?, description = ?, creator_id = ?', [name, description, creator_id], function(err, result) { 
-			
+	var query =  client.query('INSERT INTO event (name, description, id_creator) values ($1,$2, $3) RETURNING id_event', [name, description, id_creator], insertEventHandler);
+
+	function insertEventHandler(err, result){
+	
+		
+		//console.log("insertEvent RESULT "+JSON.stringify(result));
+		
 		if(err) console.log(err);
+		var id_event_new = result.rows[0]["id_event"];
+
+		console.log("new event created with ID: "+id_event_new);
 		
-		var newEventId = result.insertId;
-		
-		console.log("new event created with ID: "+newEventId);
-		
-		
-		console.log("About to inser invited_users: "+invited_users);
-		
-		//Now insert all days for the newly created event. First create the necessary format for BULK insert
-		daysValues = [] ;
+		//Insert days for the newly created event
 		for(var i=0;i<days.length;i++){
-			daysValues.push( [newEventId,days[i] ] );
+			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2)', [id_event_new, days[i]], function(err, result) { 
+				if(err) console.log(err);					
+				
+				monitor.oneLess();
+				if(monitor.getQueries() == 0) callback(id_event_new);
+				
+			});			
 		}
 		
-		console.log("values"+daysValues);
-		
-		connection.query('INSERT INTO letsmeetapp.day_of_event (id_event, datetime) VALUES ?', [daysValues], function(err, result2) { 
-			if(err) console.log(err);			
-		})
-		
-		
-		
-
-
-		invitedUsersValues = [] ;
+		//Insert days for the newly created event
 		for(var i=0;i<invited_users.length;i++){
-		
-			//For each invitation for the event generate the unique md5 invitation token
-			var digest_base = invited_users[i]+i+new Date().getTime();
 			
+			var digest_base = invited_users[i]+i+new Date().getTime();
 			var invitation_token = crypto.createHash('md5').update(digest_base).digest("hex");
 			
-			console.log("token for "+invited_users[i] +" is " +invitation_token); 
-			
-			invitedUsersValues.push( [newEventId,invited_users[i], invitation_token ] );
-		}
-		
-		console.log("Invited_users: "+invitedUsersValues);
-		
-		
-		connection.query('INSERT INTO letsmeetapp.invitation (id_event, email, invitation_token) VALUES ?', [invitedUsersValues], function(err, result3) { 
-			if(err) console.log(err);			
-		})
-		
-		
-		/*
-		connection.query('INSERT INTO letsmeetapp.event_user (id_event, id_user) VALUES ?', [invitedUsersValues], function(err, result3) { 
-			if(err) console.log(err);			
-		})
-		*/
-		
-		callback ( result );
-
-	});
-
-};
+			client.query('INSERT INTO invitation (id_event, email, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i], invitation_token], function(err, result) { 
+				
+				if(err) console.log(err);
+				
+				monitor.oneLess();
+				if(monitor.getQueries() == 0) callback(id_event_new);
+						
+			});			
+		}	
+	}		
+}
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-Events.prototype.deleteEvent = function (idEvent, callback) {
-
-	console.log("db deleteEvent: "+idEvent);
+/*
+	Monitor is used to keep track of async queries to be executed.
+	Since queries are asyn this mechanism keeps the reference of a number of queries executed.
 	
-	//Takes the QUERY, PARAMETERS TO INSERT, and a callback function for the query result that in turn calls clients callback
-	connection.query(
-			'DELETE  FROM letsmeetapp.event where id_event = ?', idEvent, function(err, result) { 			
-		if(err) console.log(err);
-		callback ( result );
-
-	});
-
-};
-
-
-
-
-
-
-
-
-
-
+*/	
+function Monitor(){	
+	
+	var queries = -1;	
+	
+	this.setQueries = function(num){		this.queries = num;	}
+	this.getQueries = function(){				return this.queries;	}	
+	this.oneLess	  = function(){						
+		this.queries--;	
+	}
+	this.isDone		  = function(){	
+		if(this.queries == 0) {
+			return true;
+		}else return false;
+	}		
+	return this;	
+}
