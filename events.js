@@ -1,28 +1,16 @@
 
 var crypto = require('crypto');		/*	We need this for md5 calculations*/
 
-
-
-
-/*	DATABASE */
-var pg = require('pg');
-var config = require('./config.json');
-
-//var conString = "postgres://root:root@localhost:5432/letsmeetapp";
-var conString = "tcp://"+config.db.username+":"+config.db.password+"@"+config.db.host+":"+config.db.port+"/"+config.db.name;
-var client = new pg.Client(conString);
-
-if(!client){
-	console.log("Starting client to DB "+conString+ " failed")
-}else{
-	console.log("Started client to  DB"+client.host+"/"+client.database);
-}
-
-client.connect();
-
 //Define an object Events that will be exported to other modules through exports.Events
 function Events(){};
 exports.Events = Events;
+
+//DB client is passed and inititialized from outside...
+exports.setAndConnectClient = function(_client){
+	client = _client;	//assign it to the module's client var	
+	client.connect();	//connect to DB...
+}
+
 
 
 /*
@@ -44,25 +32,99 @@ Events.prototype.getAllEvents = function(callback){
 			
 			if(allEvents.length == 0) callback([]);
 			//Monitoring async queries number			
-			monitor.setQueries(allEvents.length * 2);
+			monitor.setQueries(allEvents.length);
 			
 			console.log("ALL EVENTS callback **** ");
 			console.log("**all events:"+JSON.stringify(allEvents));
 
 			for(var i = 0; i<allEvents.length; i++){
-				console.log("SELECTS FOR id_event"+allEvents[i].id_event);
 				
-				//Note that we use bind to pass an extra arg as THIS...
-				client.query('SELECT * FROM day_of_event where id_event = $1',[allEvents[i].id_event], queryDaysHandler.bind( {"position":i, "id_event":allEvents[i].id_event}));				
-				//Note that we use bind to pass an extra arg as THIS...
-				client.query('SELECT email FROM invitation where id_event = $1',[allEvents[i].id_event], queryInvitedHandler.bind( {"position":i, "id_event":allEvents[i].id_event}));
+				var id_event = allEvents[i].id_event;
+		
+				client.query('SELECT DISTINCT UDA.id_user, I.email, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, user_day_availability UDA, user U, invitation I where DOE.id_event = $1 AND I.id_event = DOE.id_event AND DOE.id_day_of_event = UDA.id_day_of_event AND I.id_user_invited = UDA.id_user ', 
+						[id_event], queryHandler.bind({"position":i}));
+		
+			}
+
+			function queryHandler(err, result){
+				if(err) console.log(err);	
+
+					var rows =  result.rows;
+					var days = [];
+					var users = [];
+					
+					
+					console.log("ROWS:"+JSON.stringify(rows));
+			
+			
+					//console.log("RESULT::::::::::::::::::::::::"+JSON.stringify(rows));
+											
+					//extract unique days						
+					for(var x = 0; x<rows.length; x++){
+						addUnique(days, rows[x].datetime);
+					}
+					allEvents[this.position].days = days;		//add it to the final JSON
+					
+					//Extract unique emails					
+					for(var x = 0; x<rows.length; x++){
+						addUnique(users, rows[x].email);
+					}
+					
+					
+					//For each day we're returning in JSON, go through all users and get availability for that particilar day
+					var availability = [];
+					
+					for(var dayIndex = 0; dayIndex<days.length; dayIndex++){
+						var day = days[dayIndex];
+						
+						for(var z = 0; z<users.length; z++){
+							
+							for(var y = 0; y<rows.length; y++){
+								if(rows[y].email.toString() == users[z] && day.toString() == rows[y].datetime.toString()){
+									var email = rows[y].email.toString();
+									var email = rows[y].is_available
+									
+									console.log(rows[y].email.toString() + rows[y].datetime.toString() + rows[y].is_available.toString());
+									
+									var obj = { };					
+									obj[ rows[y].email.toString() ] = rows[y].datetime;
+									obj[ "is_available" ] =  rows[y].is_available.toString();
+
+									availability.push(obj);
+								}
+							}
+							
+						}
+					}
+					
+					allEvents[this.position].users = availability;				//add it to the final JSON
+					
+					for(var x = 0; x<availability.length; x++){
+						console.log(availability[x]);
+					}
+					
+					if(monitor.isDone() == true) callback(allEvents);			
+			}
+			
+			
+			
+			
+			//Pushes a val onto an array if it doesn't exist
+			function addUnique(destination, val){			
+				console.log("Value"+val);			
+				var flag=false;
+				for(var x = 0; x<destination.length; x++){
+					if( destination[x].toString() == val.toString() ) flag = true;
+				}
 				
-			}		
+				if(flag == false) destination.push(val);
+			}
+			
 		}
 
-		
+		/*
 		function queryDaysHandler(err, result){		
-			monitor.oneLess();			
+					
 			//"this" is passed as { "position":i, "id_event":... } using bind
 			var position = this.position;
 			var id_event = this.id_event;
@@ -80,11 +142,12 @@ Events.prototype.getAllEvents = function(callback){
 			
 			allEvents[position]["days"] = days ;
 
-			if(monitor.isDone() == true) return callback(allEvents);			
+			//if(monitor.isDone() == true) return callback(allEvents);	
+			if(monitor.isDone() == true) matchDaysWithUsers();			
 		}
 
 		function queryInvitedHandler(err, result){			
-			monitor.oneLess();			
+			
 			//"this" is passed as { "position":i, "id_event":... } using bind
 			var position = this.position;
 			var id_event = this.id_event;
@@ -98,17 +161,36 @@ Events.prototype.getAllEvents = function(callback){
 					temp.push(invited_users[i].email);
 				}
 				invited_users = temp;
-			}			
-			
-			
+			}							
 			allEvents[position]["invited_users"] = invited_users ;	
 			console.log("allEvents[position][invited_users]"+JSON.stringify(allEvents[position]["invited_users"]));			
-			if(monitor.isDone() == true) return callback(allEvents);
-		}			
+			//if(monitor.isDone() == true) return callback(allEvents);
+			if(monitor.isDone() == true) matchDaysWithUsers();
+		}	
+		*/
+		
+		//After the days and invited users are fetched from DB final JSON has to have additional information defining availability of every user for each day
+		function matchDaysWithUsers(){
+			for(var i = 0; i<allEvents.length; i++){
+				var id_event = allEvents[i].id_event;
+				
+				client.query('SELECT DISTINCT UDA.id_user, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, user_day_availability UDA	where DOE.id_event = $1 AND DOE.id_day_of_event = UDA.id_day_of_event', 
+					[id_event], function(err, result) {
+						
+						if(err) console.log(err);
+						
+						console.log("AVAILABILITY", result);
+						//callback(result)
+						
+				
+				});
+				
+		
+				
+			}
+		}	
 		
 }
-
-
 
 /*
 ************************* CREATE NEW EVENT	************************
@@ -143,7 +225,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2)', [id_event_new, days[i]], function(err, result) { 
 				if(err) console.log(err);					
 				
-				monitor.oneLess();
+				
 				if(monitor.getQueries() == 0) callback(id_event_new);
 				
 			});			
@@ -159,13 +241,35 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 				
 				if(err) console.log(err);
 				
-				monitor.oneLess();
+				
 				if(monitor.getQueries() == 0) callback(id_event_new);
 						
 			});			
 		}	
 	}		
 }
+
+
+/*
+************************* DELETE AN  EVENT	************************
+*/
+Events.prototype.deleteEvent = function (param, callback) {
+	
+	var id_event = param.id_event;
+	console.log("Deleting ID: "+id_event);
+	
+	console.log("NOT IMPLEMENTED!!!!!!!!")
+
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -184,6 +288,7 @@ function Monitor(){
 		this.queries--;	
 	}
 	this.isDone		  = function(){	
+		this.oneLess();
 		if(this.queries == 0) {
 			return true;
 		}else return false;

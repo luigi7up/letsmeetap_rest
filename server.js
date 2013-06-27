@@ -23,8 +23,13 @@ console.log("listening "+PORT);
 /*******************	END SERVER SETUP	************************** */
 
 
+//Database
+var db_conn = require('./db_conn');
+
 //IMPORT RESOURCES: Events
 var eventsResource = require('./events');
+eventsResource.setAndConnectClient(db_conn.client);
+
 
 
 /*
@@ -77,3 +82,61 @@ server.post('/events', function(req, res) {
 
 
 });
+
+/* *
+*	DELETE event (DEL /events/x)
+*/
+
+server.del('/events/:id', function(req, res) {
+	
+	var events = new eventsResource.Events() ;
+	
+	var id_event = req.params.id;
+	var body = req.body;
+	
+	console.log("received request  "+req);			//prints the REQUEST details
+	console.log("idEvent to delete "+id_event);		//id passed in the URL
+	console.log("Body: "+body);	
+	
+	var param = {"id_event":id_event};			//TODO insert into param object authentication stuff!
+
+	
+	var result = events.deleteEvent(id_event, function(result){
+		
+		if(!result) res.send(400);
+		
+		else res.send(200, result);
+
+	});
+	
+});
+
+
+/*
+*	Availability for the event
+*/
+/*
+server.get('/events/:id/availability', function(req, res) {
+	
+	var events = new eventsResource.Events() ;
+	
+	var id_event = req.params.id;
+	var body = req.body;
+	
+	console.log("received request  "+req);			//prints the REQUEST details
+	console.log("idEvent to delete "+id_event);		//id passed in the URL
+	console.log("Body: "+body);	
+	
+	var param = {"id_event":id_event};			//TODO insert into param object authentication stuff!
+
+	
+	var result = events.getAvailability(param, function(result){
+		
+		if(!result) res.send(400);
+		
+		else res.send(200, result);
+
+	});
+	
+});
+*/
