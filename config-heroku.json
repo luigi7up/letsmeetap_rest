@@ -1,9 +1,0 @@
-{
-	"db" : {
-			"host" : "ec2-23-21-130-51.compute-1.amazonaws.com",
-			"port" : 5432,
-			"name" : "dqqe1om643h93",
-			"username":"ljymeitjrrjaax",
-			"password":"2KwSqaaJYHiJIV6Is5C9WDVW_F"
-		}
-}
