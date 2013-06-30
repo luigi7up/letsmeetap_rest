@@ -34,14 +34,14 @@ Events.prototype.getAllEvents = function(callback){
 			//Monitoring async queries number			
 			monitor.setQueries(allEvents.length);
 			
-			console.log("ALL EVENTS callback **** ");
-			console.log("**all events:"+JSON.stringify(allEvents));
+//			console.log("ALL EVENTS callback **** ");
+//			console.log("**all events:"+JSON.stringify(allEvents));
 
 			for(var i = 0; i<allEvents.length; i++){
 				
 				var id_event = allEvents[i].id_event;
 		
-				client.query('SELECT DISTINCT UDA.id_user, I.email, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, user_day_availability UDA, user U, invitation I where DOE.id_event = $1 AND I.id_event = DOE.id_event AND DOE.id_day_of_event = UDA.id_day_of_event AND I.id_user_invited = UDA.id_user ', 
+				client.query('SELECT DISTINCT UDA.id_user, I.email, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, 	user_day_availability UDA, user U, invitation I where DOE.id_event = $1 AND I.id_event = DOE.id_event AND DOE.id_day_of_event = UDA.id_day_of_event AND 				I.id_user_invited = UDA.id_user ', 
 						[id_event], queryHandler.bind({"position":i}));
 		
 			}
@@ -54,7 +54,7 @@ Events.prototype.getAllEvents = function(callback){
 					var users = [];
 					
 					
-					console.log("ROWS:"+JSON.stringify(rows));
+					console.log("HAdling Event ID:"+rows[0].id_event);
 			
 			
 					//console.log("RESULT::::::::::::::::::::::::"+JSON.stringify(rows));
@@ -74,34 +74,46 @@ Events.prototype.getAllEvents = function(callback){
 					//For each day we're returning in JSON, go through all users and get availability for that particilar day
 					var availability = [];
 					
-					for(var dayIndex = 0; dayIndex<days.length; dayIndex++){
-						var day = days[dayIndex];
+					
+					for(var usersIndex = 0; usersIndex<users.length; usersIndex++){
+						//Takes user 1 and searches in the rows result each day
+						var user = users[usersIndex];
+						userAvailability = {}
 						
-						for(var z = 0; z<users.length; z++){
+						console.log(">>USER" + user);
+						
+						temp = [];
+						
+						for(var dayIndex = 0; dayIndex<days.length; dayIndex++){
+							//Now for each day go through rows and see if user has available true or false for it
+							var day = days[dayIndex];
+							
+							console.log(">>DAY" + day);
 							
 							for(var y = 0; y<rows.length; y++){
-								if(rows[y].email.toString() == users[z] && day.toString() == rows[y].datetime.toString()){
-									var email = rows[y].email.toString();
-									var email = rows[y].is_available
-									
-									console.log(rows[y].email.toString() + rows[y].datetime.toString() + rows[y].is_available.toString());
-									
-									var obj = { };					
-									obj[ rows[y].email.toString() ] = rows[y].datetime;
-									obj[ "is_available" ] =  rows[y].is_available.toString();
-
-									availability.push(obj);
+								rowUser      		=rows[y].email.toString();
+								rowDay				=rows[y].datetime.toString();		//note this is a string representation!!!
+								rowAvailability		=rows[y].is_available;
+								
+								if(user  == rowUser){
+									//This is about the user we're on in the loop
+									if(day == rowDay){
+										temp.push(rowAvailability);
+									}
 								}
+								
 							}
 							
+							
+							
 						}
-					}
+						
+						userAvailability[user] = temp;
+						availability.push(userAvailability);
 					
+					}
+									
 					allEvents[this.position].users = availability;				//add it to the final JSON
-					
-					for(var x = 0; x<availability.length; x++){
-						console.log(availability[x]);
-					}
 					
 					if(monitor.isDone() == true) callback(allEvents);			
 			}
@@ -111,7 +123,7 @@ Events.prototype.getAllEvents = function(callback){
 			
 			//Pushes a val onto an array if it doesn't exist
 			function addUnique(destination, val){			
-				console.log("Value"+val);			
+				//console.log("Value"+val);			
 				var flag=false;
 				for(var x = 0; x<destination.length; x++){
 					if( destination[x].toString() == val.toString() ) flag = true;
