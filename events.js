@@ -217,7 +217,11 @@ Events.prototype.getEventForId = function(id_event, callback){
 					
 					if(monitor.isDone() == true) callback(allEvents);			
 			}
+<<<<<<< HEAD
+
+=======
 			
+>>>>>>> github/master
 			//Pushes a val onto an array if it doesn't exist
 			function addUnique(destination, val){			
 				//console.log("Value"+val);			
@@ -230,7 +234,11 @@ Events.prototype.getEventForId = function(id_event, callback){
 			}
 			
 		}
+<<<<<<< HEAD
+		
+=======
 
+>>>>>>> github/master
 		//After the days and invited users are fetched from DB final JSON has to have additional information defining availability of every user for each day
 		function matchDaysWithUsers(){
 			for(var i = 0; i<allEvents.length; i++){
@@ -245,8 +253,12 @@ Events.prototype.getEventForId = function(id_event, callback){
 						//callback(result)
 						
 				
+<<<<<<< HEAD
+				});			
+=======
 				});
 
+>>>>>>> github/master
 			}
 		}
 */		
@@ -273,7 +285,8 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 
 	function insertEventHandler(err, result){
 	
-		
+		console.log("insertEvent RESULT "+JSON.stringify(result));
+
 		if(err) console.log(err);
 		var id_event_new = result.rows[0]["id_event"];
 
@@ -283,7 +296,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 		for(var i=0;i<days.length;i++){
 			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2)', [id_event_new, days[i]], function(err, result) { 
 				if(err) console.log(err);					
-				
+
 				if(monitor.isDone() == true) callback(id_event_new);		
 				
 			});			
@@ -298,14 +311,16 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			client.query('INSERT INTO invitation (id_event, email, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i], invitation_token], function(err, result) { 
 				
 				if(err) console.log(err);
-				
-				
+
 				if(monitor.isDone() == true) callback(id_event_new);
 						
 			});			
 		}	
 	}		
 }
+
+
+
 
 
 /*

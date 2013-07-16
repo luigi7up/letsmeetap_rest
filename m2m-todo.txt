@@ -1,0 +1,14 @@
+- Coger todas por proceso e investigarlas
+- Las alarmas : fallo de comunicación etc.
+- contadores de operaciones CDRs
+
+
+
+
+
+
+[root@corework1 bin]# crontab -l -u m2m
+00 2 * * * python /home/m2m/pythonTest/HistoryRemoveMain.py /coreshared/historyBackUp mongodb://icorework1:27017 1
+5 0 * * * /usr/local/m2m/v1.1/bin/trial_customer.sh corem2m_own/corem2m_own@10.25.144.72:1521/COREM2M icoremdb1:27017 10.25.34.129:25/no-reply@mail.m2m.telefonica.com
+0 0 * * * /usr/local/m2m/v1.1/bin/activateSubs.sh corem2m_own/corem2m_own@10.25.144.72:1521/COREM2M 10.25.34.129:25:no-reply@mail.m2m.telefonica.com
+[root@corework1 bin]#
