@@ -59,6 +59,31 @@ server.get('/events', function(req, res) {
 
 });
 
+/*	GET event by ID	*/
+server.get('/events/:id', function(req, res) {
+	
+	var id_event = req.params.id;
+		
+	var events = new eventsResource.Events() ;
+	
+	//Get all events from DB
+	events.getEventForId(id_event, function(result){
+		
+		var event = result;
+		
+		//console.log("getAllEvents received: "+JSON.stringify(result));
+		//res.send(200, allEvents);
+		
+		//If no events exist return 200 and and empty JSON
+		if(event.length == 0) {
+			res.send(202, "No event for this ID");			
+			return;
+		}else res.send(200, result);
+				
+	});		
+
+});
+
 
 
 /*

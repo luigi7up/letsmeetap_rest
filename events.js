@@ -13,11 +13,38 @@ exports.setAndConnectClient = function(_client){
 
 
 
-/*
-* *******************************GET ALL EVENTS! ****************************************************
-*/
-Events.prototype.getAllEvents = function(callback){
+/* ********************** GET EVENT FOR ID **********************/
+Events.prototype.getEventForId = function(id_event, callback){
+
+	console.log("get event with ID: "+id_event);
+	var finalJSON = {};
+	
+	monitor = new Monitor();
+	
+
+	var query =  client.query('SELECT * FROM event where id_event = $1', [id_event], queryEventId);
+	
+	function queryEventId(err, result){
+	
+		if(err) console.log(err);
 		
+		if(result.rows.length == 0) callback([]);		//No event for the ID. Return empty array
+		
+		var event = result.rows[0];					
+		callback(event);
+		
+		console.log(JSON.stringify(result));
+		/*
+		event = result.rows;			
+		if(allEvents.length == 0) callback([]);
+		
+		monitor.setQueries(allEvents.length);
+			*/
+	}
+
+
+
+/*		
 		//Number of queries that will be executed is number of events * 2 (one query for invited users and the othr for days). To synchronize them
 		monitor = new Monitor();
 			
@@ -52,8 +79,7 @@ Events.prototype.getAllEvents = function(callback){
 					var rows =  result.rows;
 					var days = [];
 					var users = [];
-					
-					
+										
 					console.log("HAdling Event ID:"+rows[0].id_event);
 			
 			
@@ -117,7 +143,11 @@ Events.prototype.getAllEvents = function(callback){
 					
 					if(monitor.isDone() == true) callback(allEvents);			
 			}
+<<<<<<< HEAD
 
+=======
+			
+>>>>>>> github/master
 			//Pushes a val onto an array if it doesn't exist
 			function addUnique(destination, val){			
 				//console.log("Value"+val);			
@@ -130,7 +160,11 @@ Events.prototype.getAllEvents = function(callback){
 			}
 			
 		}
+<<<<<<< HEAD
 		
+=======
+
+>>>>>>> github/master
 		//After the days and invited users are fetched from DB final JSON has to have additional information defining availability of every user for each day
 		function matchDaysWithUsers(){
 			for(var i = 0; i<allEvents.length; i++){
@@ -145,21 +179,27 @@ Events.prototype.getAllEvents = function(callback){
 						//callback(result)
 						
 				
+<<<<<<< HEAD
 				});			
+=======
+				});
+
+>>>>>>> github/master
 			}
-		}	
+		}
+*/		
 		
 }
 
 /*
-************************* CREATE NEW EVENT	************************
+************************* CREATE A NEW EVENT	************************
 */
 
 Events.prototype.insertEvent = function (newEventJson, callback) {
 	var name 					= newEventJson.name;
 	var description  			= newEventJson.description;
-	var id_creator 				= newEventJson.id_creator;
-	var days						= newEventJson.days;
+	var id_creator 			= newEventJson.id_creator;
+	var days					= newEventJson.days;
 	var invited_users		= newEventJson.invited_users;
 	
 	console.log("insertEvent called ");
@@ -172,7 +212,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 	function insertEventHandler(err, result){
 	
 		console.log("insertEvent RESULT "+JSON.stringify(result));
-		
+
 		if(err) console.log(err);
 		var id_event_new = result.rows[0]["id_event"];
 
@@ -182,8 +222,8 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 		for(var i=0;i<days.length;i++){
 			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2)', [id_event_new, days[i]], function(err, result) { 
 				if(err) console.log(err);					
-				
-				if(monitor.isDone() == true) callback(id_event_new);
+
+				if(monitor.isDone() == true) callback(id_event_new);		
 				
 			});			
 		}
@@ -197,7 +237,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			client.query('INSERT INTO invitation (id_event, email, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i], invitation_token], function(err, result) { 
 				
 				if(err) console.log(err);
-								
+
 				if(monitor.isDone() == true) callback(id_event_new);
 						
 			});			
