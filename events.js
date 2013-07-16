@@ -113,14 +113,11 @@ Events.prototype.getAllEvents = function(callback){
 					
 					}
 									
-					allEvents[this.position].users = availability;				//add it to the final JSON
+					allEvents[this.position].invited_users = availability;				//add it to the final JSON
 					
 					if(monitor.isDone() == true) callback(allEvents);			
 			}
-			
-			
-			
-			
+
 			//Pushes a val onto an array if it doesn't exist
 			function addUnique(destination, val){			
 				//console.log("Value"+val);			
@@ -133,53 +130,6 @@ Events.prototype.getAllEvents = function(callback){
 			}
 			
 		}
-
-		/*
-		function queryDaysHandler(err, result){		
-					
-			//"this" is passed as { "position":i, "id_event":... } using bind
-			var position = this.position;
-			var id_event = this.id_event;
-			var days = result.rows;
-						
-			if(days.length == 0){
-				days = [];			
-			}else{
-				var temp = [];	//extract just the datetime part of the day
-				for(var i=0;i<days.length;i++){
-					temp.push(days[i].datetime);
-				}
-				days = temp;
-			}			
-			
-			allEvents[position]["days"] = days ;
-
-			//if(monitor.isDone() == true) return callback(allEvents);	
-			if(monitor.isDone() == true) matchDaysWithUsers();			
-		}
-
-		function queryInvitedHandler(err, result){			
-			
-			//"this" is passed as { "position":i, "id_event":... } using bind
-			var position = this.position;
-			var id_event = this.id_event;
-			var invited_users = result.rows;
-						
-			if(invited_users.length == 0){
-				invited_users = [];			
-			}else{
-				var temp = [];	//extract just the datetime part of the day
-				for(var i=0;i<invited_users.length;i++){
-					temp.push(invited_users[i].email);
-				}
-				invited_users = temp;
-			}							
-			allEvents[position]["invited_users"] = invited_users ;	
-			console.log("allEvents[position][invited_users]"+JSON.stringify(allEvents[position]["invited_users"]));			
-			//if(monitor.isDone() == true) return callback(allEvents);
-			if(monitor.isDone() == true) matchDaysWithUsers();
-		}	
-		*/
 		
 		//After the days and invited users are fetched from DB final JSON has to have additional information defining availability of every user for each day
 		function matchDaysWithUsers(){
@@ -195,10 +145,7 @@ Events.prototype.getAllEvents = function(callback){
 						//callback(result)
 						
 				
-				});
-				
-		
-				
+				});			
 			}
 		}	
 		
@@ -224,8 +171,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 
 	function insertEventHandler(err, result){
 	
-		
-		//console.log("insertEvent RESULT "+JSON.stringify(result));
+		console.log("insertEvent RESULT "+JSON.stringify(result));
 		
 		if(err) console.log(err);
 		var id_event_new = result.rows[0]["id_event"];
@@ -237,8 +183,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2)', [id_event_new, days[i]], function(err, result) { 
 				if(err) console.log(err);					
 				
-				
-				if(monitor.getQueries() == 0) callback(id_event_new);
+				if(monitor.isDone() == true) callback(id_event_new);
 				
 			});			
 		}
@@ -252,14 +197,16 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			client.query('INSERT INTO invitation (id_event, email, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i], invitation_token], function(err, result) { 
 				
 				if(err) console.log(err);
-				
-				
-				if(monitor.getQueries() == 0) callback(id_event_new);
+								
+				if(monitor.isDone() == true) callback(id_event_new);
 						
 			});			
 		}	
 	}		
 }
+
+
+
 
 
 /*
