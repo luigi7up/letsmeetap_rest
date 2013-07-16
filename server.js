@@ -67,7 +67,13 @@ server.get('/events/:id', function(req, res) {
 	var events = new eventsResource.Events() ;
 	
 	//Get all events from DB
-	events.getEventForId(id_event, function(result){
+	var err = events.getEventForId(id_event, function(result){
+		
+		//Exception occured and returned
+		if(result instanceof Error) {
+			res.send(500, "Internal server error");
+			return;
+		}
 		
 		var event = result;
 		
@@ -80,7 +86,8 @@ server.get('/events/:id', function(req, res) {
 			return;
 		}else res.send(200, result);
 				
-	});		
+	});	
+		
 
 });
 

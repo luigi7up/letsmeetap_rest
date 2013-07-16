@@ -17,29 +17,103 @@ exports.setAndConnectClient = function(_client){
 Events.prototype.getEventForId = function(id_event, callback){
 
 	console.log("get event with ID: "+id_event);
+	
 	var finalJSON = {};
 	
 	monitor = new Monitor();
 	
+	//Returns event/invitation/user combination
+	/*
+	var sql = 'SELECT E.id_event, E.id_creator, E.name, E.description, E.created, I.email_invitation, U.id_user, U.email, U.nickname FROM event E RIGHT JOIN invitation I ON(E.id_event = I.id_event) LEFT JOIN "user" U ON(I.id_user_invited = U.id_user) where E.id_event = $1';
+	*/
+	
+	//returns all event and event creator details
+	var sql = 'SELECT E.id_event, E.id_creator, E.name, E.description, E.created, U.email as creator_email, U.nickname as creator_nickname FROM event E LEFT JOIN "user" U ON(E.id_creator= U.id_user) where E.id_event = $1'
 
-	var query =  client.query('SELECT * FROM event where id_event = $1', [id_event], queryEventId);
+
+	var query =  client.query(sql, [id_event], queryEventId);
 	
 	function queryEventId(err, result){
 	
-		if(err) console.log(err);
+		if(err) {
+			console.log(err.stack);			
+			callback(err);			//call callback sending it err
+			return;					//stop execution
+		}
 		
-		if(result.rows.length == 0) callback([]);		//No event for the ID. Return empty array
-		
-		var event = result.rows[0];					
-		callback(event);
+		//If no results found. return empty array
+		if(result.rowCount == 0) {
+			callback([]);		//No event for the ID. Return empty array
+			return;
+		}
 		
 		console.log(JSON.stringify(result));
-		/*
-		event = result.rows;			
-		if(allEvents.length == 0) callback([]);
 		
-		monitor.setQueries(allEvents.length);
-			*/
+		result = result.rows;	
+		
+		var event 	= {}
+		
+		event.id_event 				= result[0]['id_event']; 
+		event.name 					= result[0]['name']; 
+		event.description 			= result[0]['description']; 
+		event.creator_email 		= result[0]['creator_email']; 
+		event.creator_nickname = result[0]['creator_nickname']; 
+		
+		//Get all days for the event
+		var sql = 'SELECT * from day_of_event where id_event=$1 order by datetime';
+		
+		client.query(sql, [id_event], handleDays);
+		
+		function handleDays(err, result){
+			
+			event.days = [];
+			console.log(JSON.stringify(result));
+			
+			if(result.rowCount != 0) {
+				rows = result.rows;
+				for(var i=0; i<rows.length; i++){
+					event.days.push(rows[i]['datetime']);
+				}
+			}
+
+			//return the constructed event object
+			//callback(event);	
+			
+		}
+
+		//Get data for users invited to this event
+		var sql = 'SELECT E.id_event, I.email_invitation, U.email, I.id_user_invited FROM event E LEFT JOIN invitation I ON(I.id_event = E.id_event) LEFT JOIN "user" U ON(U.id_user = I.id_user_invited) where E.id_event = $1'
+		
+		client.query(sql, [id_event], handleUsers);
+		
+		function handleUsers(err, result){
+			console.log(JSON.stringify(result));
+			
+			event.invited_users = [];
+						
+			if(result.rowCount != 0) {
+				rows = result.rows;
+				for(var i=0; i<rows.length; i++){
+					event.invited_users.push({
+							"invited_email": rows[i]['email_invitation'],
+							"user_email": rows[i]['email'],
+							"availability": ['m','m','m','m','m']							
+						});
+				}
+			}
+
+			//return the constructed event object
+			callback(event);	
+			
+		}
+		
+		
+		//Get the availability of every user for each day
+		
+
+
+
+		
 	}
 
 
