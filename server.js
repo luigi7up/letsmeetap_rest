@@ -36,26 +36,35 @@ eventsResource.setAndConnectClient(db_conn.client);
 *	GET /events
 */
 server.get('/events', function(req, res) {
+
 	
-	console.log("request GET  /events ");
+	
+	//TODO Optimize this method cause it relies on multiple call on events.getEventForId()
+	console.log("request GET  /events on "+new Date().getMilliseconds());
 	var events = new eventsResource.Events() ;
+	
+	var finalJSON = [];
+
 	
 	//Get all events from DB
 	events.getAllEvents(function(result){
 		
+		//Exception occured and returned
+		if(result instanceof Error) {
+			res.send(500, "Internal server error");
+			return;
+		}
+
 		var allEvents = result;
-		
-		//console.log("getAllEvents received: "+JSON.stringify(result));
-		//res.send(200, allEvents);
-		
+
+		console.log("RESPONSE sent on "+new Date().getMilliseconds())
 		//If no events exist return 200 and and empty JSON
 		if(allEvents.length == 0) {
 			res.send(200, []);
 			return;
 		}else res.send(200, result);
+	});	
 		
-		
-	});		
 
 });
 
@@ -84,7 +93,7 @@ server.get('/events/:id', function(req, res) {
 		if(event.length == 0) {
 			res.send(202, "No event for this ID");			
 			return;
-		}else res.send(200, result);
+		}else res.send(200, event);
 				
 	});	
 		
@@ -102,6 +111,7 @@ server.post('/events', function(req, res) {
 	
 	var newEventJson = req.body;
 	
+	console.log("-----------------------------------------------------------------------");
 	console.log("request POST  /events with body: "+JSON.stringify(newEventJson));
 
 	var result = events.insertEvent(newEventJson, function(result){
@@ -147,6 +157,7 @@ server.del('/events/:id', function(req, res) {
 /*
 *	Availability for the event
 */
+
 /*
 server.get('/events/:id/availability', function(req, res) {
 	

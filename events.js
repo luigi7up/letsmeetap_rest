@@ -20,7 +20,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 	
 	var finalJSON = {};
 	
-	monitor = new Monitor();		//counter of async queries. 
+	var monitor = new Monitor();		//counter of async queries. 
 	monitor.setQueries(3);			//1 to get
 	
 	//Returns event/invitation/user combination
@@ -48,7 +48,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 			return;
 		}
 		
-		console.log(JSON.stringify(result));
+		//console.log(JSON.stringify(result));
 		
 		result = result.rows;	
 		
@@ -71,7 +71,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 		//Main query handler holds a nested ones
 		function handleDays(err, result){
 			
-			console.log(JSON.stringify(result));
+			//console.log(JSON.stringify(result));
 			
 			if(result.rowCount != 0) {
 				rows = result.rows;
@@ -91,7 +91,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 		
 		//Call as a nested inside handleDays
 		function handleUsers(err, result){
-			console.log(JSON.stringify(result));
+			//console.log(JSON.stringify(result));
 						
 			if(result.rowCount != 0) {
 				rows = result.rows;
@@ -102,9 +102,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 						});
 				}
 			}
-			//return the constructed event object			
-			//if(monitor.isDone() == true) callback(event);				
-			//callback(event);						
+						
 			
 			//AVAILABILITY
 			var sql = 'SELECT I.id_event, I.email_invitation, I.id_user_invited, U.nickname, U.email, DOE.id_day_of_event,DOE.datetime, AV.is_available from invitation I LEFT JOIN "user" U ON(U.id_user = I.id_user_invited) LEFT JOIN day_of_event DOE ON(I.id_event = DOE.id_event) LEFT JOIN user_day_availability AV ON(DOE.id_day_of_event = AV.id_day_of_event AND AV.id_user = I.id_user_invited) where I.id_event = $1'		
@@ -116,7 +114,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 		
 		function handleAvailability(err, result){
 		
-			console.log("handling availability");
+			//console.log("handling availability");
 			if(err) {
 				console.log(err.stack);			
 				callback(err);			//call callback sending it err
@@ -133,7 +131,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 			
 		}
 		
-		//callback(event);
+		
 		
 	}//end
 	
@@ -142,10 +140,9 @@ Events.prototype.getEventForId = function(id_event, callback){
 	*/
 	function availabilityForEachDay(days, email_invitation, rows){
 	
-		console.log("handling availability for:" +email_invitation);
+		//console.log("handling availability for:" +email_invitation);
 		
-		console.log("ROWS:"+JSON.stringify(rows));
-		console.log("--------------------------------------------------");
+		//console.log("--------------------------------------------------");
 	
 		var availability = [];
 		for(var i=0; i<days.length; i++){
@@ -153,21 +150,79 @@ Events.prototype.getEventForId = function(id_event, callback){
 			for(var x=0; x<rows.length; x++){
 			
 			
-				console.log("email_invitation:"+rows[x].email_invitation);
-				console.log("datetime:"+rows[x].datetime);
+				//console.log("email_invitation:"+rows[x].email_invitation);
+				//console.log("datetime:"+rows[x].datetime);
 				
 				if(rows[x].email_invitation == email_invitation && rows[x].datetime.toJSON() == days[i].toJSON()){
 					is_available = rows[x].is_available;
 				}  	 		
 			}
 			
-			console.log("availability for day "+days[i] + ' is '+is_available);
+			//console.log("availability for day "+days[i] + ' is '+is_available);
 			availability.push(is_available);
 		}
 		return availability;
 	}
 		
 }
+
+
+
+Events.prototype.getAllEvents = function(callback){
+	
+	var self = this;
+
+	var monitor = new Monitor();
+	
+	//returns all event and event creator details
+	var sql = 'SELECT id_event from event';
+	var query =  client.query(sql, handleReturnEvents);
+
+	function handleReturnEvents(err, result){
+		
+		var allEvents = [];
+
+		if(err) {
+				console.log(err.stack);			
+				callback(err);			//call callback sending it err
+				return;					//stop execution
+		}
+
+		monitor.setQueries(result.rowCount);
+
+		var rows = result.rows;
+
+		for(var i=0;i<rows.length;i++){
+			self.getEventForId(rows[i]['id_event'], function(result){
+				allEvents.push(result);	
+				if(monitor.isDone()) callback(allEvents)	
+			});
+		}	
+		
+	}
+	
+
+
+	/*
+	var final = [];
+
+	var event_ids = [38,39];
+
+	var monitor = new Monitor();
+	monitor.setQueries(event_ids.length);
+
+	for(var i=0;i<event_ids.length;i++){
+		this.getEventForId(event_ids[i], function(result){
+			all.push(result);	
+			if(monitor.isDone()) callback(all)	
+		});
+	}
+	*/
+	
+}
+
+
+
 
 /*
 ************************* CREATE A NEW EVENT	************************
