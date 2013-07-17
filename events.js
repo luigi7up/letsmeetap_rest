@@ -20,7 +20,8 @@ Events.prototype.getEventForId = function(id_event, callback){
 	
 	var finalJSON = {};
 	
-	monitor = new Monitor();
+	monitor = new Monitor();		//counter of async queries. 
+	monitor.setQueries(3);			//1 to get
 	
 	//Returns event/invitation/user combination
 	/*
@@ -58,15 +59,18 @@ Events.prototype.getEventForId = function(id_event, callback){
 		event.description 			= result[0]['description']; 
 		event.creator_email 		= result[0]['creator_email']; 
 		event.creator_nickname = result[0]['creator_nickname']; 
+		event.days 						= [];
+		event.invited_users = [];
 		
 		//Get all days for the event
 		var sql = 'SELECT * from day_of_event where id_event=$1 order by datetime';
 		
 		client.query(sql, [id_event], handleDays);
 		
+		
+		//Main query handler holds a nested ones
 		function handleDays(err, result){
 			
-			event.days = [];
 			console.log(JSON.stringify(result));
 			
 			if(result.rowCount != 0) {
@@ -76,192 +80,92 @@ Events.prototype.getEventForId = function(id_event, callback){
 				}
 			}
 
-			//return the constructed event object
-			//callback(event);	
+			//Nested query getting the users for the event
+			var sql = 'SELECT E.id_event, I.email_invitation, U.email, I.id_user_invited FROM event E LEFT JOIN invitation I ON(I.id_event = E.id_event) LEFT JOIN "user" U ON(U.id_user = I.id_user_invited) where E.id_event = $1'		
+			client.query(sql, [id_event], handleUsers);
+				
+			if(monitor.isDone() == true) callback(event);						
 			
-		}
+		}//end handleDays()
 
-		//Get data for users invited to this event
-		var sql = 'SELECT E.id_event, I.email_invitation, U.email, I.id_user_invited FROM event E LEFT JOIN invitation I ON(I.id_event = E.id_event) LEFT JOIN "user" U ON(U.id_user = I.id_user_invited) where E.id_event = $1'
 		
-		client.query(sql, [id_event], handleUsers);
-		
+		//Call as a nested inside handleDays
 		function handleUsers(err, result){
 			console.log(JSON.stringify(result));
-			
-			event.invited_users = [];
 						
 			if(result.rowCount != 0) {
 				rows = result.rows;
 				for(var i=0; i<rows.length; i++){
 					event.invited_users.push({
-							"invited_email": rows[i]['email_invitation'],
-							"user_email": rows[i]['email'],
-							"availability": ['m','m','m','m','m']							
+							"email_invitation": rows[i]['email_invitation'],
+							"user_email": rows[i]['email']						
 						});
 				}
 			}
-
-			//return the constructed event object
-			callback(event);	
+			//return the constructed event object			
+			//if(monitor.isDone() == true) callback(event);				
+			//callback(event);						
+			
+			//AVAILABILITY
+			var sql = 'SELECT I.id_event, I.email_invitation, I.id_user_invited, U.nickname, U.email, DOE.id_day_of_event,DOE.datetime, AV.is_available from invitation I LEFT JOIN "user" U ON(U.id_user = I.id_user_invited) LEFT JOIN day_of_event DOE ON(I.id_event = DOE.id_event) LEFT JOIN user_day_availability AV ON(DOE.id_day_of_event = AV.id_day_of_event AND AV.id_user = I.id_user_invited) where I.id_event = $1'		
+			client.query(sql, [id_event], handleAvailability);
+			
+			if(monitor.isDone() == true) callback(event);		
+						
+		}
+		
+		function handleAvailability(err, result){
+		
+			console.log("handling availability");
+			if(err) {
+				console.log(err.stack);			
+				callback(err);			//call callback sending it err
+				return;					//stop execution
+			}
+						 
+			//For each user U got invited check what they have set as available for the day in the RESULT of the previous query
+			for(var i=0; i<event.invited_users.length; i++){	
+				
+				event.invited_users[i]['availability'] = availabilityForEachDay(event.days, event.invited_users[i]['email_invitation'], result.rows);					
+			}
+			
+			if(monitor.isDone() == true) callback(event);		
 			
 		}
 		
+		//callback(event);
 		
-		//Get the availability of every user for each day
-		
-
-
-
-		
-	}
-
-
-
-/*		
-		//Number of queries that will be executed is number of events * 2 (one query for invited users and the othr for days). To synchronize them
-		monitor = new Monitor();
-			
-		console.log("Events.prototype.getAllEvents");
-		var allEvents = [];
-		
-		var query =  client.query('SELECT * FROM event', queryAllEventsHandler);
-		
+	}//end
 	
-		function queryAllEventsHandler(err, result){		
-			allEvents = result.rows;
-			
-			if(allEvents.length == 0) callback([]);
-			//Monitoring async queries number			
-			monitor.setQueries(allEvents.length);
-			
-//			console.log("ALL EVENTS callback **** ");
-//			console.log("**all events:"+JSON.stringify(allEvents));
-
-			for(var i = 0; i<allEvents.length; i++){
-				
-				var id_event = allEvents[i].id_event;
+	/*	Returns and array with values y, n, m for each day
+		It searches a row in rows that has day AND email invitation and it returns is_available value. If its null it converts it into '?'
+	*/
+	function availabilityForEachDay(days, email_invitation, rows){
+	
+		console.log("handling availability for:" +email_invitation);
 		
-				client.query('SELECT DISTINCT UDA.id_user, I.email, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, 	user_day_availability UDA, user U, invitation I where DOE.id_event = $1 AND I.id_event = DOE.id_event AND DOE.id_day_of_event = UDA.id_day_of_event AND 				I.id_user_invited = UDA.id_user ', 
-						[id_event], queryHandler.bind({"position":i}));
-		
-			}
-
-			function queryHandler(err, result){
-				if(err) console.log(err);	
-
-					var rows =  result.rows;
-					var days = [];
-					var users = [];
-										
-					console.log("HAdling Event ID:"+rows[0].id_event);
+		console.log("ROWS:"+JSON.stringify(rows));
+		console.log("--------------------------------------------------");
+	
+		var availability = [];
+		for(var i=0; i<days.length; i++){
+			var is_available;			
+			for(var x=0; x<rows.length; x++){
 			
 			
-					//console.log("RESULT::::::::::::::::::::::::"+JSON.stringify(rows));
-											
-					//extract unique days						
-					for(var x = 0; x<rows.length; x++){
-						addUnique(days, rows[x].datetime);
-					}
-					allEvents[this.position].days = days;		//add it to the final JSON
-					
-					//Extract unique emails					
-					for(var x = 0; x<rows.length; x++){
-						addUnique(users, rows[x].email);
-					}
-					
-					
-					//For each day we're returning in JSON, go through all users and get availability for that particilar day
-					var availability = [];
-					
-					
-					for(var usersIndex = 0; usersIndex<users.length; usersIndex++){
-						//Takes user 1 and searches in the rows result each day
-						var user = users[usersIndex];
-						userAvailability = {}
-						
-						console.log(">>USER" + user);
-						
-						temp = [];
-						
-						for(var dayIndex = 0; dayIndex<days.length; dayIndex++){
-							//Now for each day go through rows and see if user has available true or false for it
-							var day = days[dayIndex];
-							
-							console.log(">>DAY" + day);
-							
-							for(var y = 0; y<rows.length; y++){
-								rowUser      		=rows[y].email.toString();
-								rowDay				=rows[y].datetime.toString();		//note this is a string representation!!!
-								rowAvailability		=rows[y].is_available;
-								
-								if(user  == rowUser){
-									//This is about the user we're on in the loop
-									if(day == rowDay){
-										temp.push(rowAvailability);
-									}
-								}
-								
-							}
-							
-							
-							
-						}
-						
-						userAvailability[user] = temp;
-						availability.push(userAvailability);
-					
-					}
-									
-					allEvents[this.position].invited_users = availability;				//add it to the final JSON
-					
-					if(monitor.isDone() == true) callback(allEvents);			
-			}
-<<<<<<< HEAD
-
-=======
-			
->>>>>>> github/master
-			//Pushes a val onto an array if it doesn't exist
-			function addUnique(destination, val){			
-				//console.log("Value"+val);			
-				var flag=false;
-				for(var x = 0; x<destination.length; x++){
-					if( destination[x].toString() == val.toString() ) flag = true;
-				}
+				console.log("email_invitation:"+rows[x].email_invitation);
+				console.log("datetime:"+rows[x].datetime);
 				
-				if(flag == false) destination.push(val);
+				if(rows[x].email_invitation == email_invitation && rows[x].datetime.toJSON() == days[i].toJSON()){
+					is_available = rows[x].is_available;
+				}  	 		
 			}
 			
+			console.log("availability for day "+days[i] + ' is '+is_available);
+			availability.push(is_available);
 		}
-<<<<<<< HEAD
-		
-=======
-
->>>>>>> github/master
-		//After the days and invited users are fetched from DB final JSON has to have additional information defining availability of every user for each day
-		function matchDaysWithUsers(){
-			for(var i = 0; i<allEvents.length; i++){
-				var id_event = allEvents[i].id_event;
-				
-				client.query('SELECT DISTINCT UDA.id_user, DOE.id_event, DOE.id_day_of_event, DOE.datetime, UDA.is_available	from day_of_event DOE, user_day_availability UDA	where DOE.id_event = $1 AND DOE.id_day_of_event = UDA.id_day_of_event', 
-					[id_event], function(err, result) {
-						
-						if(err) console.log(err);
-						
-						console.log("AVAILABILITY", result);
-						//callback(result)
-						
-				
-<<<<<<< HEAD
-				});			
-=======
-				});
-
->>>>>>> github/master
-			}
-		}
-*/		
+		return availability;
+	}
 		
 }
 
