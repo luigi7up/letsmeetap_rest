@@ -25,11 +25,15 @@ console.log("listening "+PORT);
 
 //Database
 var db_conn = require('./db_conn');
+db_conn.client.connect();
 
 //IMPORT RESOURCES: Events
 var eventsResource = require('./events');
 eventsResource.setAndConnectClient(db_conn.client);
 
+//Auth module
+var authResource = require('./authentication');
+authResource.setAndConnectClient(db_conn.client);
 
 
 /*
@@ -37,6 +41,9 @@ eventsResource.setAndConnectClient(db_conn.client);
 */
 server.get('/events', function(req, res) {
 
+	var authToken = req.query("auth");
+	var auth = new authResource.Auth();
+	
 	
 	
 	//TODO Optimize this method cause it relies on multiple call on events.getEventForId()
@@ -45,26 +52,35 @@ server.get('/events', function(req, res) {
 	
 	var finalJSON = [];
 
-	
-	//Get all events from DB
-	events.getAllEvents(function(result){
-		
-		//Exception occured and returned
-		if(result instanceof Error) {
-			res.send(500, "Internal server error");
-			return;
+	auth.isAuthenticated(authToken, authHandler);
+
+	function authHandler(result){
+
+		if(result == false){
+			res.send(401, "You are not authenticated");
+			return;			
 		}
 
-		var allEvents = result;
+		//Get all events from DB
+		events.getAllEvents(function(result){
+			
+			//Exception occured and returned
+			if(result instanceof Error) {
+				res.send(500, "Internal server error");
+				return;
+			}
 
-		console.log("RESPONSE sent on "+new Date().getMilliseconds())
-		//If no events exist return 200 and and empty JSON
-		if(allEvents.length == 0) {
-			res.send(200, []);
-			return;
-		}else res.send(200, result);
-	});
-		
+			var allEvents = result;
+
+			console.log("RESPONSE sent on "+new Date().getMilliseconds())
+			//If no events exist return 200 and and empty JSON
+			if(allEvents.length == 0) {
+				res.send(200, []);
+				return;
+			}else res.send(200, result);
+		});
+
+	}
 
 });
 
