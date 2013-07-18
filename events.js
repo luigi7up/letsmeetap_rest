@@ -57,6 +57,7 @@ Events.prototype.getEventForId = function(id_event, callback){
 		event.id_event 				= result[0]['id_event']; 
 		event.name 					= result[0]['name']; 
 		event.description 			= result[0]['description']; 
+		event.created 					= result[0]['created']; 
 		event.creator_email 		= result[0]['creator_email']; 
 		event.creator_nickname = result[0]['creator_nickname']; 
 		event.days 						= [];
@@ -146,15 +147,12 @@ Events.prototype.getEventForId = function(id_event, callback){
 	
 		var availability = [];
 		for(var i=0; i<days.length; i++){
-			var is_available;			
+			var is_available = "?";		//don't send null because the client cannot parse it easily. Send "?" instead			
 			for(var x=0; x<rows.length; x++){
-			
-			
-				//console.log("email_invitation:"+rows[x].email_invitation);
-				//console.log("datetime:"+rows[x].datetime);
 				
-				if(rows[x].email_invitation == email_invitation && rows[x].datetime.toJSON() == days[i].toJSON()){
+				if(rows[x].email_invitation == email_invitation && rows[x].datetime.toJSON() == days[i].toJSON()){					
 					is_available = rows[x].is_available;
+					if(is_available == null) is_available = "?"
 				}  	 		
 			}
 			
@@ -167,7 +165,11 @@ Events.prototype.getEventForId = function(id_event, callback){
 }
 
 
-
+/*
+*	Returns an array with json objects for each event with all data about it, invited users and their availability.
+*	This method relies on getEventForId method found in tjhe prototype of Events object. What it does is it wueries the DB
+*	for events this user can see and then for each id_event runs getEventForId(id, function(result){}).  TODO: implement it without relying on getEventForId
+*/
 Events.prototype.getAllEvents = function(callback){
 	
 	var self = this;
@@ -196,6 +198,8 @@ Events.prototype.getAllEvents = function(callback){
 			self.getEventForId(rows[i]['id_event'], function(result){
 				allEvents.push(result);	
 				if(monitor.isDone()) callback(allEvents)	
+					
+				
 			});
 		}	
 		

@@ -63,7 +63,7 @@ server.get('/events', function(req, res) {
 			res.send(200, []);
 			return;
 		}else res.send(200, result);
-	});	
+	});
 		
 
 });
