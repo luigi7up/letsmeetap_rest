@@ -203,26 +203,7 @@ Events.prototype.getAllEvents = function(callback){
 			});
 		}	
 		
-	}
-	
-
-
-	/*
-	var final = [];
-
-	var event_ids = [38,39];
-
-	var monitor = new Monitor();
-	monitor.setQueries(event_ids.length);
-
-	for(var i=0;i<event_ids.length;i++){
-		this.getEventForId(event_ids[i], function(result){
-			all.push(result);	
-			if(monitor.isDone()) callback(all)	
-		});
-	}
-	*/
-	
+	}	
 }
 
 
@@ -230,16 +211,22 @@ Events.prototype.getAllEvents = function(callback){
 
 /*
 ************************* CREATE A NEW EVENT	************************
+* @newEventJson is the JSON body that came in the POST request body 
+* @auth is the authentication object passed from server.post() that holds the current users data: id_user, email...
 */
 
-Events.prototype.insertEvent = function (newEventJson, callback) {
+Events.prototype.insertEvent = function (newEventJson, auth,callback) {
+	var id_creator 			= auth.getIdUser();
+	var email_creator 		= auth.getEmail();
+	
 	var name 					= newEventJson.name;
-	var description  			= newEventJson.description;
-	var id_creator 			= newEventJson.id_creator;
-	var days					= newEventJson.days;
+	var description  		= newEventJson.description;	
+	var days						= newEventJson.days;
 	var invited_users		= newEventJson.invited_users;
 	
-	console.log("insertEvent called ");
+	debugger;
+	
+	//console.log("insertEvent called ");
 	
 	monitor = new Monitor();
 	monitor.setQueries(days.length+invited_users.length);
@@ -248,7 +235,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 
 	function insertEventHandler(err, result){
 	
-		console.log("insertEvent RESULT "+JSON.stringify(result));
+		//console.log("insertEvent RESULT "+JSON.stringify(result));
 
 		if(err) console.log(err);
 		var id_event_new = result.rows[0]["id_event"];
@@ -271,7 +258,7 @@ Events.prototype.insertEvent = function (newEventJson, callback) {
 			var digest_base = invited_users[i]+i+new Date().getTime();
 			var invitation_token = crypto.createHash('md5').update(digest_base).digest("hex");
 			
-			client.query('INSERT INTO invitation (id_event, email, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i], invitation_token], function(err, result) { 
+			client.query('INSERT INTO invitation (id_event, email_invitation, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i]['invitation_email'], invitation_token], function(err, result) { 
 				
 				if(err) console.log(err);
 

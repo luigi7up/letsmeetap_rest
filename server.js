@@ -1,11 +1,6 @@
-/*
- * Main app module, contains server routes and basic request-response logic.
- */
-
 
 var PORT = process.env.PORT || 1983;
 var restify = require('restify');
-
 
 var options = {
 	serverName: 'Lets meetapp node.js apis',
@@ -15,14 +10,23 @@ var options = {
 var server = restify.createServer(options);
 
 server.use(restify.bodyParser({ mapParams: false }));
+server.use(restify.queryParser());		//Enables parsing the URL parameters
+
+/*	* ***************************AUTHENTIFICATION INTERCEPTOR ****************************************/
+//based on http://stackoverflow.com/questions/11038830/how-to-intercept-node-js-express-request
+var auth;
+server.use(function(req,res,next){
+	var authToken = req.query.auth;
+	auth = new authResource.Auth();	
+	auth.authenticate(authToken, function(result){
+		next();	//after authentification proceed with the next handler in chain...
+	});
+});
 
 server.listen(PORT);
-
-
 console.log("listening "+PORT);
-/*******************	END SERVER SETUP	************************** */
 
-
+/**********************************DB, resources, authentication module... *********************************************/
 //Database
 var db_conn = require('./db_conn');
 db_conn.client.connect();
@@ -36,15 +40,18 @@ var authResource = require('./authentication');
 authResource.setAndConnectClient(db_conn.client);
 
 
+/**********************************         ROUTES                *********************************************/
 /*
-*	GET /events
+*	GET /events 
+*	Returns all events that a authenticated user can see 
 */
 server.get('/events', function(req, res) {
 
-	var authToken = req.query("auth");
-	var auth = new authResource.Auth();
-	
-	
+	/* If the request has to authenticated use this in every resource handler! */
+	if(auth.isAuthenticated() == false) {
+		res.send(auth.accessDenied().code, auth.accessDenied().msg);
+		return;		
+	}
 	
 	//TODO Optimize this method cause it relies on multiple call on events.getEventForId()
 	console.log("request GET  /events on "+new Date().getMilliseconds());
@@ -52,16 +59,7 @@ server.get('/events', function(req, res) {
 	
 	var finalJSON = [];
 
-	auth.isAuthenticated(authToken, authHandler);
-
-	function authHandler(result){
-
-		if(result == false){
-			res.send(401, "You are not authenticated");
-			return;			
-		}
-
-		//Get all events from DB
+	//Get all events from DB
 		events.getAllEvents(function(result){
 			
 			//Exception occured and returned
@@ -80,20 +78,24 @@ server.get('/events', function(req, res) {
 			}else res.send(200, result);
 		});
 
-	}
-
 });
 
-/*	GET event by ID	*/
+
+
+
+/************************** GET EVENT FOR ID *********************************************/
 server.get('/events/:id', function(req, res) {
 	
-	var id_event = req.params.id;
-		
+	/* If the request has to authenticated use this in every resource handler! */
+	if(auth.isAuthenticated() == false) {
+		res.send(auth.accessDenied().code, auth.accessDenied().msg);
+		return;		
+	}	
+	var id_event = req.params.id;		
 	var events = new eventsResource.Events() ;
 	
 	//Get all events from DB
-	var err = events.getEventForId(id_event, function(result){
-		
+	var err = events.getEventForId(id_event, function(result){		
 		//Exception occured and returned
 		if(result instanceof Error) {
 			res.send(500, "Internal server error");
@@ -112,30 +114,29 @@ server.get('/events/:id', function(req, res) {
 		}else res.send(200, event);
 				
 	});	
-		
-
 });
 
 
 
-/*
-*	POST /events
-*/
+/*******************************************CREATE EVENT ************************************************/
 server.post('/events', function(req, res) {
 
+	/* If the request has to authenticated use this in every resource handler! */
+	if(auth.isAuthenticated() == false) {
+		res.send(auth.accessDenied().code, auth.accessDenied().msg);
+		return;		
+	}	
+	
 	var events = new eventsResource.Events() ;
 	
 	var newEventJson = req.body;
-	
-	console.log("-----------------------------------------------------------------------");
-	console.log("request POST  /events with body: "+JSON.stringify(newEventJson));
+		
+	//console.log("request POST  /events with body: "+JSON.stringify(newEventJson));
 
-	var result = events.insertEvent(newEventJson, function(result){
+	var result = events.insertEvent(newEventJson, auth, function(result){			
 		
-		if(!result) res.send(400);
-		
+		if(!result) res.send(400);		
 		else res.send(200, result);
-
 	});
 
 
@@ -144,7 +145,6 @@ server.post('/events', function(req, res) {
 /* *
 *	DELETE event (DEL /events/x)
 */
-
 server.del('/events/:id', function(req, res) {
 	
 	var events = new eventsResource.Events() ;
@@ -157,45 +157,11 @@ server.del('/events/:id', function(req, res) {
 	console.log("Body: "+body);	
 	
 	var param = {"id_event":id_event};			//TODO insert into param object authentication stuff!
-
 	
-	var result = events.deleteEvent(id_event, function(result){
-		
-		if(!result) res.send(400);
-		
+	var result = events.deleteEvent(id_event, function(result){		
+		if(!result) res.send(400);		
 		else res.send(200, result);
-
 	});
 	
 });
 
-
-/*
-*	Availability for the event
-*/
-
-/*
-server.get('/events/:id/availability', function(req, res) {
-	
-	var events = new eventsResource.Events() ;
-	
-	var id_event = req.params.id;
-	var body = req.body;
-	
-	console.log("received request  "+req);			//prints the REQUEST details
-	console.log("idEvent to delete "+id_event);		//id passed in the URL
-	console.log("Body: "+body);	
-	
-	var param = {"id_event":id_event};			//TODO insert into param object authentication stuff!
-
-	
-	var result = events.getAvailability(param, function(result){
-		
-		if(!result) res.send(400);
-		
-		else res.send(200, result);
-
-	});
-	
-});
-*/
