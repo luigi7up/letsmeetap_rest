@@ -170,15 +170,20 @@ Events.prototype.getEventForId = function(id_event, callback){
 *	This method relies on getEventForId method found in tjhe prototype of Events object. What it does is it wueries the DB
 *	for events this user can see and then for each id_event runs getEventForId(id, function(result){}).  TODO: implement it without relying on getEventForId
 */
-Events.prototype.getAllEvents = function(callback){
+Events.prototype.getAllEvents = function(auth, callback){
 	
 	var self = this;
 
+	var id_user = auth.getIdUser();
+
 	var monitor = new Monitor();
 	
-	//returns all event and event creator details
-	var sql = 'SELECT id_event from event';
-	var query =  client.query(sql, handleReturnEvents);
+	//returns all events user has been invited to or is a creator of...
+	var sql = 'SELECT DISTINCT e.* from event e, invitation i where (i.id_user_invited=$1 and i.id_event=e.id_event) OR e.id_creator=$1';
+
+
+
+	var query =  client.query(sql, [id_user], handleReturnEvents);
 
 	function handleReturnEvents(err, result){
 		
@@ -189,6 +194,13 @@ Events.prototype.getAllEvents = function(callback){
 				callback(err);			//call callback sending it err
 				return;					//stop execution
 		}
+
+		if(result.rowCount == 0) {
+			callback([]);		//No events for this user in the DB
+			return;
+		}
+
+		
 
 		monitor.setQueries(result.rowCount);
 
@@ -215,13 +227,13 @@ Events.prototype.getAllEvents = function(callback){
 * @auth is the authentication object passed from server.post() that holds the current users data: id_user, email...
 */
 
-Events.prototype.insertEvent = function (newEventJson, auth,callback) {
+Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 	var id_creator 			= auth.getIdUser();
 	var email_creator 		= auth.getEmail();
 	
-	var name 					= newEventJson.name;
+	var name 				= newEventJson.name;
 	var description  		= newEventJson.description;	
-	var days						= newEventJson.days;
+	var days				= newEventJson.days;
 	var invited_users		= newEventJson.invited_users;
 	
 	debugger;
@@ -229,7 +241,7 @@ Events.prototype.insertEvent = function (newEventJson, auth,callback) {
 	//console.log("insertEvent called ");
 	
 	monitor = new Monitor();
-	monitor.setQueries(days.length+invited_users.length);
+	monitor.setQueries(days.length+invited_users.length+1);		//+1 is the insert for the creator_id into event_user table
 	
 	var query =  client.query('INSERT INTO event (name, description, id_creator) values ($1,$2, $3) RETURNING id_event', [name, description, id_creator], insertEventHandler);
 
@@ -258,14 +270,28 @@ Events.prototype.insertEvent = function (newEventJson, auth,callback) {
 			var digest_base = invited_users[i]+i+new Date().getTime();
 			var invitation_token = crypto.createHash('md5').update(digest_base).digest("hex");
 			
-			client.query('INSERT INTO invitation (id_event, email_invitation, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i]['invitation_email'], invitation_token], function(err, result) { 
+			client.query('INSERT INTO invitation (id_event, email_invitation, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i]['email_invitation'], invitation_token], function(err, result) { 
 				
 				if(err) console.log(err);
 
 				if(monitor.isDone() == true) callback(id_event_new);
 						
 			});			
-		}	
+		}
+
+		//Insert creators id into event_user
+		client.query('INSERT INTO event_user (id_event, id_user) VALUES ($1, $2)', [id_event_new, id_creator], function(err, result) { 
+				if(err) console.log(err);					
+
+				if(monitor.isDone() == true) callback(id_event_new);		
+				
+			});		
+
+
+
+
+
+
 	}		
 }
 

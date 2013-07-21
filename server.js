@@ -16,9 +16,11 @@ server.use(restify.queryParser());		//Enables parsing the URL parameters
 //based on http://stackoverflow.com/questions/11038830/how-to-intercept-node-js-express-request
 var auth;
 server.use(function(req,res,next){
-	var authToken = req.query.auth;
+	var emailAuth = req.query.e;
+	var passAuth = req.query.p;
+	console.log("REQUEST INTERCEPTED. params are "+JSON.stringify(req.query))
 	auth = new authResource.Auth();	
-	auth.authenticate(authToken, function(result){
+	auth.authenticate(emailAuth, passAuth, function(result){
 		next();	//after authentification proceed with the next handler in chain...
 	});
 });
@@ -41,8 +43,9 @@ authResource.setAndConnectClient(db_conn.client);
 
 
 /**********************************         ROUTES                *********************************************/
+
 /*
-*	GET /events 
+*	***************************************** GET /events  ****************************************************
 *	Returns all events that a authenticated user can see 
 */
 server.get('/events', function(req, res) {
@@ -60,23 +63,26 @@ server.get('/events', function(req, res) {
 	var finalJSON = [];
 
 	//Get all events from DB
-		events.getAllEvents(function(result){
-			
-			//Exception occured and returned
-			if(result instanceof Error) {
-				res.send(500, "Internal server error");
-				return;
-			}
+	events.getAllEvents(auth, function(result){
+		
+		//Exception occured and returned
+		if(result instanceof Error) {
+			res.send(500, "Internal server error");
+			return;
+		}
 
-			var allEvents = result;
+		var allEvents = result;
 
-			console.log("RESPONSE sent on "+new Date().getMilliseconds())
-			//If no events exist return 200 and and empty JSON
-			if(allEvents.length == 0) {
-				res.send(200, []);
-				return;
-			}else res.send(200, result);
-		});
+		console.log("RESPONSE sent on "+new Date().getMilliseconds())
+		//If no events exist return 200 and and empty JSON
+		if(allEvents.length == 0) {
+			res.send(200, []);
+			return;
+		}else {
+			console.log("returning the following data: "+ JSON.stringify(result));
+			res.send(200, result);
+		}
+	});
 
 });
 
@@ -84,9 +90,10 @@ server.get('/events', function(req, res) {
 
 
 /************************** GET EVENT FOR ID *********************************************/
+/*
 server.get('/events/:id', function(req, res) {
 	
-	/* If the request has to authenticated use this in every resource handler! */
+	//If the request has to authenticated use this in every resource handler! 
 	if(auth.isAuthenticated() == false) {
 		res.send(auth.accessDenied().code, auth.accessDenied().msg);
 		return;		
@@ -115,8 +122,7 @@ server.get('/events/:id', function(req, res) {
 				
 	});	
 });
-
-
+*/
 
 /*******************************************CREATE EVENT ************************************************/
 server.post('/events', function(req, res) {
@@ -163,5 +169,26 @@ server.del('/events/:id', function(req, res) {
 		else res.send(200, result);
 	});
 	
+});
+
+
+/******************************************* USERS ***************************************************************/
+/*
+	Check if email and pass provided give an existing user
+	It's not a login! It's just a resource that gives a OK or not OK for credentials
+*/
+server.get('/users/login', function(req, res){
+	var emailAuth 	= req.query.e;
+	var passAuth 	= req.query.p;
+	console.log("Checking credentials for "+JSON.stringify(req.query))
+	auth = new authResource.Auth();	
+	auth.authenticate(emailAuth, passAuth, function(result){
+		if( result==true ){
+			res.send(200, 'User exists and credentials are ok');	
+		}else{
+			res.send(401, 'User credentials were not recognized');		//Maybe some other code?
+		}
+	});
+
 });
 

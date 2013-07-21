@@ -12,12 +12,12 @@ exports.setAndConnectClient = function(_client){
 	//client.connect();	//connect to DB...
 }
 
-Auth.prototype.authenticate = function(authToken, callback){
+Auth.prototype.authenticate = function(emailAuth, passAuth, callback){
 	var self = this;	
-	var sql = 'SELECT * from "user" where email=$1';
-	var query =  client.query(sql, [authToken], function(err, result){				
+	var sql = 'SELECT * from "user" where email=$1 and password=$2';
+	var query =  client.query(sql, [emailAuth,passAuth], function(err, result){				
 		if(err){
-			console.log(err)
+			console.log("ERROR! "+err);
 			callback(err);
 			return;
 		}		
