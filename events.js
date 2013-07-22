@@ -179,7 +179,8 @@ Events.prototype.getAllEvents = function(auth, callback){
 	var monitor = new Monitor();
 	
 	//returns all events user has been invited to or is a creator of...
-	var sql = 'SELECT DISTINCT e.* from event e, invitation i where (i.id_user_invited=$1 and i.id_event=e.id_event) OR e.id_creator=$1';
+	//var sql = 'SELECT DISTINCT e.* from event e, invitation i where (i.id_user_invited=$1 and i.id_event=e.id_event) OR e.id_creator=$1';
+	var sql = 'SELECT DISTINCT e.* from event e, event_user eu where (eu.id_user=$1 and eu.id_event=e.id_event) OR e.id_creator=$1';
 
 
 
