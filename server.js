@@ -162,6 +162,12 @@ server.put('/events/:id/availability',function(req,res){
 	var id_event 	= req.params.id;
 	var updateJson 	= req.body;
 
+	if(!updateJson){
+		res.send(404, "Body you sent is incorrect");
+		return;	
+	} 
+
+
 	var events = new eventsResource.Events() ;
 
 	//First check if user is in the event....
