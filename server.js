@@ -148,6 +148,65 @@ server.post('/events', function(req, res) {
 
 });
 
+
+/********************************************* Change availability for EVENT ******************************************************************/
+//PUT /events/:id/availability
+server.put('/events/:id/availability',function(req,res){
+	/* If the request has to authenticated use this in every resource handler! */
+	if(auth.isAuthenticated() == false) {
+		res.send(auth.accessDenied().code, auth.accessDenied().msg);
+		return;		
+	}
+
+	var id_user 	= auth.getIdUser();			//authenticated user id...
+	var id_event 	= req.params.id;
+	var updateJson 	= req.body;
+
+	var events = new eventsResource.Events() ;
+
+	//First check if user is in the event....
+	events.isUserInEvent(id_user, id_event, function(result){
+		//Exception occured and returned
+			if(result instanceof Error) {
+				res.send(500, "Internal server error");
+				return;
+			}
+
+			//If no events exist return 200 and and empty JSON
+			if(result == true) {
+				changeAvailability();
+			}else {								
+				res.send(404, "User is not invited to this event!?");
+				return;
+			}	
+	});
+
+	//Call this if isUserInEvent returns true
+	function changeAvailability(){
+		
+		console.log("User "+id_user+" is updating availability for event "+id_event);
+		console.log("Received updateJson: \n"+JSON.stringify(updateJson));
+
+		var events 		= new eventsResource.Events() ;
+		var result = events.updateAvailability(id_event, updateJson, auth, function(result){					
+			//Exception occured and returned
+			if(result instanceof Error) {
+				res.send(500, "Internal server error");
+				return;
+			}
+
+			//If no events exist return 200 and and empty JSON
+			if(result == true) {
+				res.send(200, "Updated successfully");
+				return;
+			}else {
+				res.send(400, "Bad request. Might be the values of available? y,m,n ?");
+			}
+		});
+
+	}
+});
+
 /* *
 *	DELETE event (DEL /events/x)
 */
@@ -191,4 +250,7 @@ server.get('/users/login', function(req, res){
 	});
 
 });
+
+
+
 

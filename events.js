@@ -288,13 +288,114 @@ Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 				
 			});		
 
-
-
-
-
-
 	}		
 }
+
+
+
+
+
+
+
+
+
+/*
+************************* UPDATE AVAILABILITY OF A USER FOR A NEW EVENT	************************
+* @updateJson holding an array of json objects with day:availability pairs... { "20-09...":"y" }
+* @auth is the authentication object passed from server.post() that holds the current users data: id_user, email...
+*/
+
+Events.prototype.updateAvailability = function (id_event, updateJson, auth, callback) {
+	var id_user 	= auth.getIdUser();
+	
+	monitor = new Monitor();
+	monitor.setQueries(updateJson.length);		//for each day in the updateJson we will call one update
+
+	console.log("Events.prototype.updateAvailability received updateJson of size "+updateJson.length);
+
+	var daysAvailability = [];
+
+	//Convert the json into nice key value pairs...
+	for (i=0; i<updateJson.length; i++) {
+		for (key in updateJson[i]) {
+	      	
+	      	daysAvailability.push({
+	      		"datetime": key,
+	      		"is_available": updateJson[i][key]
+	      	});			
+	    }
+	}
+
+	
+	//For each day received go and do update
+	for(var i=0; i<daysAvailability.length; i++){
+		var datetime = daysAvailability[i]["datetime"];
+		var is_available = daysAvailability[i]["is_available"];
+
+		if(is_available != 'y' && is_available != 'n' && is_available!='m'){
+			console.log("ERROR! Cannot use value " +is_available+ " to update is_available");
+			callback(false);
+			return;			
+		}
+
+		console.log("About to update day "+datetime+ "with is_available:" +is_available);
+		client.query('UPDATE user_day_availability as UDA SET is_available = $4 FROM day_of_event DE where(UDA.id_day_of_event = DE.id_day_of_event AND DE.id_event = $1 AND UDA.id_user=$2 AND "datetime"=$3)', 
+			[id_event, id_user, datetime, is_available], updateAvailabilityHandler);
+
+	}
+	
+	var ERROR;	//since updates are async we cant call callback(err) immediately if it occurs because there'll be another result coming in soon after asking to send the callback
+	function updateAvailabilityHandler(err, result){
+		//console.log("handling availability");
+		if(err) {			
+			console.log("updateAvailability query received a json it didn't like!");						
+			console.log(err.stack);						
+			ERROR = err;
+			//return;					//stop execution
+		}
+
+		console.log("Result of update"+JSON.stringify(result));
+
+		if(monitor.isDone() == true) {
+			if(ERROR) {
+				callback(ERROR);
+				return;
+			}
+
+			callback(true);
+		}
+	}
+	
+	
+}
+
+Events.prototype.isUserInEvent = function (id_user, id_event, callback) {
+	
+	client.query('SELECT * FROM event_user where id_user = $1 AND id_event= $2', [id_user, id_event], userInEventHandler);
+
+	function userInEventHandler(err, result){
+		if(err) {			
+			console.log("updateAvailability query received a json it didn't like!");						
+			console.log(err.stack);						
+			callback(err);
+			return;					//stop execution
+		}	
+
+		console.log("Checking if user "+id_user+" is in event "+id_event);
+		//console.log("RESULT is: "+ JSON.stringify(result));
+		if(result.rowCount == 0){
+			console.log("User doesn't belong to event...");
+			callback(false);
+		}else {
+			console.log("User belongs to event...");
+			callback(true);
+		}
+
+	}
+	
+}
+
+
 
 
 
