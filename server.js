@@ -213,6 +213,40 @@ server.put('/events/:id/availability',function(req,res){
 	}
 });
 
+
+
+
+
+//Accepting invitation to an event
+server.put('/events/invitation',function(req,res){
+	/* If the request has to authenticated use this in every resource handler! */
+	if(auth.isAuthenticated() == false) {
+		res.send(auth.accessDenied().code, auth.accessDenied().msg);
+		return;		
+	}
+
+	var id_user 			= auth.getIdUser();
+	var email_creator 		= auth.getEmail();
+	var invitation_token 	= req.params.invitation_token;	
+
+	console.log("Acceptiong invitation with token "+invitation_token);
+
+	var events = new eventsResource.Events() ;
+
+	
+	events.acceptInvitation(id_user, invitation_token, function(result){
+
+		if(result != true) res.send(400, "No updates made!");		
+		else res.send(200, result);
+		
+	});	
+
+
+});	
+
+
+
+
 /* *
 *	DELETE event (DEL /events/x)
 */
@@ -231,7 +265,7 @@ server.del('/events/:id', function(req, res) {
 	
 	var result = events.deleteEvent(id_event, function(result){		
 		if(!result) res.send(400);		
-		else res.send(200, result);
+		else res.send(200, "Update successful");
 	});
 	
 });
