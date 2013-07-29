@@ -141,6 +141,12 @@ server.post('/events', function(req, res) {
 
 	var result = events.insertEvent(newEventJson, auth, function(result){			
 		
+		//Exception occured and returned
+		if(result instanceof Error) {
+			res.send(500, "Internal server error");
+			return;
+		}
+		
 		if(!result) res.send(400);		
 		else res.send(200, result);
 	});
@@ -161,6 +167,8 @@ server.put('/events/:id/availability',function(req,res){
 	var id_user 	= auth.getIdUser();			//authenticated user id...
 	var id_event 	= req.params.id;
 	var updateJson 	= req.body;
+
+	console.log('/events/:id/availability BODY:'+ updateJson);
 
 	if(!updateJson){
 		res.send(404, "Body you sent is incorrect");
@@ -236,8 +244,14 @@ server.put('/events/invitation',function(req,res){
 	
 	events.acceptInvitation(id_user, invitation_token, function(result){
 
-		if(result != true) res.send(400, "No updates made!");		
-		else res.send(200, result);
+		//Exception occured and returned
+		if(result instanceof Error) {
+			res.send(500, "Internal server error");
+			return;
+		}
+
+		if(result != true) res.send(400, "No updates made! Maybe you're trying to accept it for the second time?");		
+		else res.send(200, "Invitation accepted");
 		
 	});	
 

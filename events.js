@@ -104,10 +104,12 @@ Events.prototype.getEventForId = function(id_event, callback){
 				}
 
 				//Inject details for the CREATOR (since he's not in invitation table)
+				/*
 				event.invited_users.push({
-							"email_invitation": "",
+							"email_invitation": event.creator_email,
 							"user_email": event.creator_email						
 						});
+				*/
 
 			}					
 			
@@ -145,12 +147,8 @@ Events.prototype.getEventForId = function(id_event, callback){
 	/*	Returns and array with values y, n, m for each day
 		It searches a row in rows that has day AND email invitation and it returns is_available value. If its null it converts it into '?'
 	*/
-	function availabilityForEachDay(days, email_invitation, rows){
-	
-		//console.log("handling availability for:" +email_invitation);
-		
-		//console.log("--------------------------------------------------");
-	
+	function availabilityForEachDay(days, email_invitation, rows){		
+		debugger;
 		var availability = [];
 		for(var i=0; i<days.length; i++){
 			var is_available = "?";		//don't send null because the client cannot parse it easily. Send "?" instead			
@@ -242,12 +240,9 @@ Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 	var days				= newEventJson.days;
 	var invited_users		= newEventJson.invited_users;
 	
-	debugger;
-	
-	//console.log("insertEvent called ");
 	
 	monitor = new Monitor();
-	monitor.setQueries(days.length+invited_users.length+2);		//+1 is the insert for the creator_id into event_user table. +1 for the query inserting user_day_availability for  the creator
+	monitor.setQueries(days.length+invited_users.length+3);		//+1 is the insert for the creator_id into event_user table. +1 for the query inserting user_day_availability for  the creator. +1 for inserting creator into invitation table...
 	
 	var query =  client.query('INSERT INTO event (name, description, id_creator) values ($1,$2, $3) RETURNING id_event', [name, description, id_creator], insertEventHandler);
 
@@ -263,7 +258,11 @@ Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 		//Insert days for the newly created event and days into user_day_availability for the CREATOR
 		for(var i=0;i<days.length;i++){
 			client.query('INSERT INTO day_of_event (id_event, datetime) VALUES ($1, $2) RETURNING id_day_of_event', [id_event_new, days[i]], function(err, result) { 
-				if(err) console.log(err);
+				if(err) {
+					console.log(err);
+					callback(err);
+					return;
+				}
 
 				var id_day_of_event_new = result.rows[0]["id_day_of_event"];
 				
@@ -271,6 +270,12 @@ Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 				
 				//Add newly created day into user_day_availability table with creators ID				
 				client.query('INSERT INTO user_day_availability (id_user, id_day_of_event) VALUES ($1, $2)', [id_creator, id_day_of_event_new], function(err, result) { 
+
+					if(err) {
+						console.log(err);
+						callback(err);
+						return;
+					}
 
 					if(monitor.isDone() == true) callback(id_event_new);
 					console.log("INSERT INTO user_day_availability OK for user "+id_creator+"and newly created day "+id_day_of_event_new);	
@@ -283,27 +288,46 @@ Events.prototype.insertEvent = function (newEventJson, auth, callback) {
 
 		}
 		
-		//Insert invited users for the newly created event into INVITATION
+		//Insert invited users for the newly created event into INVITATION. Also, we'll enter creators data into invitation table for simplicity when it comes to getting the data out
 		for(var i=0;i<invited_users.length;i++){
 			
 			var digest_base = invited_users[i]+i+new Date().getTime();
 			var invitation_token = crypto.createHash('md5').update(digest_base).digest("hex");
 			
 			client.query('INSERT INTO invitation (id_event, email_invitation, invitation_token) VALUES ($1, $2, $3)', [id_event_new, invited_users[i]['email_invitation'], invitation_token], function(err, result) { 
+				if(err) {
+					console.log(err);
+					callback(err);
+					return;
+				}
 				
-				if(err) console.log(err);
-
 				if(monitor.isDone() == true) callback(id_event_new);
 						
 			});			
 		}//for
 
-		//Insert creators id into event_user
-		client.query('INSERT INTO event_user (id_event, id_user) VALUES ($1, $2)', [id_event_new, id_creator], function(err, result) { 
-				if(err) console.log(err);					
+		//Insert creators data into invitation. This way it's easier to recolect it later...
+		client.query('INSERT INTO invitation (id_event, email_invitation, id_user_invited, invitation_token) VALUES ($1, $2, $3, $4)', [id_event_new, email_creator, id_creator, 'creator'], function(err, result) { 
+				if(err) {
+					console.log(err);
+					callback(err);
+					return;
+				}
 				if(monitor.isDone() == true) callback(id_event_new);		
 				
-			});		
+		});
+
+		//Insert creator's id into event_user
+		client.query('INSERT INTO event_user (id_event, id_user) VALUES ($1, $2)', [id_event_new, id_creator], function(err, result) { 
+				if(err) {
+					console.log(err);
+					callback(err);
+					return;
+				}
+				if(monitor.isDone() == true) callback(id_event_new);		
+				
+			});	
+					
 	}//insertEventHandler		
 }
 
@@ -415,9 +439,8 @@ Events.prototype.isUserInEvent = function (id_user, id_event, callback) {
 Events.prototype.acceptInvitation = function(id_user, invitation_token, callback){
 
 	
-	//1 UPDATE INVITATION TABLE
-	client.query('UPDATE invitation SET id_user_invited=$1 where invitation_token=$2', [id_user, invitation_token], updateInvitationHandler);
-
+	//1 UPDATE INVITATION TABLE BY Changing id_invited_user from -1 tfor the ID of the user calling web service. For sec. reasons we check if id_invited_user=-1. Once accepted noone can change it
+	client.query('UPDATE invitation SET id_user_invited=$1 where invitation_token=$2 and id_user_invited=-1 RETURNING id_event', [id_user, invitation_token], updateInvitationHandler);
 	function updateInvitationHandler(err, result){
 		if(err) {										
 			console.log(err.stack);						
@@ -425,20 +448,56 @@ Events.prototype.acceptInvitation = function(id_user, invitation_token, callback
 			return;					//stop execution
 		}
 
+		console.log("updateInvitationHandler result: "+JSON.stringify(result));
+
 		if(result.rowCount != 1){
 			//no invitation token found 
 			callback(false);
 			return;					//stop execution
 		} 
 
-		callback(true);
-		return;
+		var id_event = result.rows[0]['id_event'];
 
-		console.log(JSON.stringify(result));
+	//2 INSERT INTO EVENT_USERS is_user and id_event
+		client.query('INSERT into event_user (id_event, id_user) values($1, $2)', [id_event, id_user ], function(err, result){
+			if(err) {										
+				console.log(err.stack);						
+				callback(err);
+				return;					//stop execution
+			}
+
+			if(result.rowCount != 1){	
+				console.log("INSERT into event_user INSERTED NOTHING. probbably already exists....");									
+				callback(false);
+				return;					//stop execution
+			}
+
+
+			//3 CREATE ENTRIES FOR USER_DAY_AVAILABILITY
+			client.query('INSERT into user_day_availability SELECT $1, id_day_of_event, $3 from day_of_event where id_event=$2', [id_user, id_event, 'm'  ], function(err, result){
+				if(err) {										
+					console.log(err.stack);						
+					callback(err);
+					return;					//stop execution
+				}
+
+				if(result.rowCount == 0){
+					console.log("When accepting event invitation INSERT into user_day_availability FAILED: "+JSON.stringify(result));				
+					callback(false);
+					return;					//stop execution
+				}
+
+				callback(true);
+			}); 
+
+			
+
+		});
+
 
 	}
-	//2 INSERT INTO EVENT_USERS
-	//3 CREATE ENTRIES FOR USER_DAY_AVAILABILITY
+
+	
 
 
 
